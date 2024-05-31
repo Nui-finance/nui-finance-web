@@ -1,0 +1,11 @@
+{
+  "extends": ["next", "prettier"],
+  "plugins": ["eslint-plugin-import"],
+  "rules": {
+    "no-unused-labels": "warn",
+    "no-const-assign": "warn",
+    "no-constant-condition": "warn",
+    "no-unused-vars": "warn",
+    "no-import-assign": "warn"
+  }
+}
