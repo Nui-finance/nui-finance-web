@@ -22,10 +22,10 @@ import { Wallet } from 'components/molecule/icons';
 
 const AddressCell = ({ address, ...restProps }) => {
   return (
-    <HStack p="4" {...restProps}>
+    <Button p="4" variant="ghost" {...restProps}>
       <Wallet color="primary.400" />
       <Text color="primary.400">{formatAddress(address)}</Text>
-    </HStack>
+    </Button>
   );
 };
 
@@ -44,6 +44,7 @@ const ConnectButton = () => {
         <Popover trigger="hover" placement="bottom-end" openDelay={100}>
           <PopoverTrigger>
             <Button
+              px="4"
               variant="ghost"
               fontSize="md"
               color="primary.400"
@@ -89,6 +90,7 @@ const ConnectButton = () => {
               color="primary.400"
               fontWeight="medium"
               disabled={!!currentAccount}
+              px="4"
             >
               {currentAccount ? currentAccount.address : 'Connect'}
             </Button>

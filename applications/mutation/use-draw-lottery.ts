@@ -1,24 +1,29 @@
 import { useSignAndExecuteTransactionBlock } from '@mysten/dapp-kit';
 import { PoolTypeEnum, packAllocateRewardsTxb } from 'sui-api-final-v2';
 import useInvalidateAllInfo from './use-invalidate-all-info';
-import { useErrorPopup } from 'components/molecule/error-popup';
+import { useModal } from 'components/organism/modals';
 
 type UseDrawLotteryProps = { poolType: PoolTypeEnum } & Parameters<
   typeof useSignAndExecuteTransactionBlock
 >[0];
 
 const useDrawLottery = ({ poolType, ...options }: UseDrawLotteryProps) => {
-  const { mutate: invalidateAllInfo } = useInvalidateAllInfo();
-  const { errorPopup } = useErrorPopup();
+  const { mutateAsync: invalidateAllInfo } = useInvalidateAllInfo();
+  const { errorPopup } = useModal();
   const mutation = useSignAndExecuteTransactionBlock({
     ...options,
     onSuccess: (result, variables, context) => {
-      options.onSuccess?.(result, variables, context);
       invalidateAllInfo();
+      options.onSuccess?.(result, variables, context);
     },
-    onError: (error) => {
-      errorPopup();
-      console.error(error);
+    onError: (error, variables, context) => {
+      options.onError?.(error, variables, context);
+      if (error?.message.includes('Rejected from user')) {
+        return;
+      } else {
+        console.error(error);
+        errorPopup();
+      }
     },
   });
   const mutate = async (poolId) => {

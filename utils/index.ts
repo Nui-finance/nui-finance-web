@@ -74,6 +74,13 @@ export const getProtocolLabel = (type: string) => {
   }
 };
 
+export function roundTo(num: number, decimal: number) {
+  return (
+    Math.round((num + Number.EPSILON) * Math.pow(10, decimal)) /
+    Math.pow(10, decimal)
+  );
+}
+
 export const convertScientificToDecimal = (number: number) => {
   if (!number?.toString()?.includes('e')) return number;
   const numberArr = number?.toString()?.split('e');

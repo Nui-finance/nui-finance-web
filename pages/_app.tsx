@@ -7,12 +7,12 @@ import {
 import { getFullnodeUrl } from '@mysten/sui.js/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@mysten/dapp-kit/dist/index.css';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Header from '../components/template/header';
 import { IntlProvider } from 'react-intl';
 import { theme } from 'theme';
 import Footer from 'components/template/footer';
-import { ErrorPopupProvider } from 'components/molecule/error-popup';
+import { ModalProvider } from 'components/organism/modals';
 
 // Config options for the networks you want to connect to
 const { networkConfig } = createNetworkConfig({
@@ -26,10 +26,14 @@ type SuiNetworkType = keyof typeof networkConfig;
 
 export default function App({ Component, pageProps }) {
   const [activeNetwork, setActiveNetwork] = useState<SuiNetworkType>('mainnet');
+
+  useEffect(() => {
+    console.info(`[MAIN] ${process.env.NEXT_PUBLIC_VERSION}`);
+  }, []);
   return (
     <IntlProvider defaultLocale="en-US" locale="en-US">
       <ChakraProvider theme={theme}>
-        <ErrorPopupProvider>
+        <ModalProvider>
           <QueryClientProvider client={queryClient}>
             <SuiClientProvider
               networks={networkConfig}
@@ -58,7 +62,7 @@ export default function App({ Component, pageProps }) {
               </WalletProvider>
             </SuiClientProvider>
           </QueryClientProvider>
-        </ErrorPopupProvider>
+        </ModalProvider>
       </ChakraProvider>
     </IntlProvider>
   );

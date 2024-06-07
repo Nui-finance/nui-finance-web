@@ -21,9 +21,9 @@ import RewardImage from 'assets/reward.png';
 
 import { useClaim } from 'applications/mutation';
 import useCountdown from 'utils/use-countdown';
-import { useMemo, useState } from 'react';
-import ResultModal from './result-modal';
+import { useState } from 'react';
 import { UserWinnerInfo } from 'applications/query/use-get-user-winner-info';
+import { useModal } from './modals';
 
 type SelectedModalProps = {
   result?: any;
@@ -51,6 +51,14 @@ const SelectedModal = ({
     winnerInfoList,
     onSuccess: (data: any) => {
       setResult(data);
+      successOpen({
+        pool,
+        result: data,
+        amount: convertScientificToDecimal(pool?.lastRewardBalance),
+        onClose: () => {
+          onClose();
+        },
+      });
       claimSuccessDisclosure.onOpen();
     },
     onError: () => {
@@ -61,22 +69,10 @@ const SelectedModal = ({
     },
   });
   const countdown = useCountdown(Number(winnerInfoList?.[0]?.expireTime));
-  const succesAmount = useMemo(() => {
-    return convertScientificToDecimal(pool?.lastRewardBalance);
-  }, []);
+  const { successOpen } = useModal();
+
   return (
     <>
-      <ResultModal
-        type="SUCCESS"
-        result={result}
-        pool={pool}
-        amount={succesAmount}
-        {...claimSuccessDisclosure}
-        onClose={() => {
-          claimSuccessDisclosure.onClose();
-          onClose();
-        }}
-      />
       <ResponsiveModal size="sm" isOpen={isOpen} onClose={onClose}>
         <ResponsiveModalBody>
           <Flex flexDirection="column" gap="4" alignItems="center" w="full">
@@ -112,7 +108,7 @@ const SelectedModal = ({
             isLoading={isClaiming}
           >
             Claim {convertScientificToDecimal(pool?.lastRewardBalance)}{' '}
-            {poolCoin[poolType]?.name}
+            {pool?.rewardCoinName}
           </Button>
         </ResponsiveModalFooter>
       </ResponsiveModal>

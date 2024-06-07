@@ -3,10 +3,10 @@ import {
   useSignAndExecuteTransactionBlock,
 } from '@mysten/dapp-kit';
 import { Pool } from 'applications/type';
-import { packClaimRewardTxb, saveClaimDigest } from 'sui-api-final-v2';
+import { packClaimRewardTxb } from 'sui-api-final-v2';
 import useInvalidateAllInfo from './use-invalidate-all-info';
-import { useErrorPopup } from 'components/molecule/error-popup';
 import { UserWinnerInfo } from 'applications/query/use-get-user-winner-info';
+import { useModal } from 'components/organism/modals';
 
 type UseClaimProps = {
   pool: Pool;
@@ -16,20 +16,22 @@ type UseClaimProps = {
 const useClaim = ({ pool, winnerInfoList, ...options }: UseClaimProps) => {
   const account = useCurrentAccount();
   const { mutate: invalidateAllInfo } = useInvalidateAllInfo();
-  const { errorPopup } = useErrorPopup();
+  const { errorPopup } = useModal();
   const mutation = useSignAndExecuteTransactionBlock({
     ...options,
     onSuccess: (result, variables, context) => {
+      invalidateAllInfo();
       options.onSuccess?.(result, variables, context);
-      saveClaimDigest(pool.poolType, account?.address, result);
+      // saveClaimDigest(pool.poolType, account?.address, result);
     },
     onError: (error, variables, context) => {
       options.onError?.(error, variables, context);
-      errorPopup();
-      console.error(error);
-    },
-    onSettled: () => {
-      invalidateAllInfo();
+      if (error?.message.includes('Rejected from user')) {
+        return;
+      } else {
+        console.error(error);
+        errorPopup();
+      }
     },
   });
   const canClaim = !!account?.address && winnerInfoList?.length > 0;

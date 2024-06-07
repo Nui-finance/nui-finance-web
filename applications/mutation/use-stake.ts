@@ -2,13 +2,14 @@ import {
   useCurrentAccount,
   useSignAndExecuteTransactionBlock,
 } from '@mysten/dapp-kit';
-import { packStakeTxb } from 'sui-api-final-v2';
+import { BucketCoinTypeEnum, packStakeTxb } from 'sui-api-final-v2';
 import useInvalidateAllInfo from './use-invalidate-all-info';
-import { useErrorPopup } from 'components/molecule/error-popup';
+import { useModal } from 'components/organism/modals';
 
 type stakeProps = {
   poolId: string;
   stakeAmount: number;
+  bucketStakeCoinType: BucketCoinTypeEnum;
 };
 
 const useStake = (
@@ -16,7 +17,7 @@ const useStake = (
 ) => {
   const account = useCurrentAccount();
   const { mutate: invalidateAllInfo } = useInvalidateAllInfo();
-  const { errorPopup } = useErrorPopup();
+  const { errorPopup } = useModal();
 
   const mutation = useSignAndExecuteTransactionBlock({
     ...options,
@@ -24,16 +25,30 @@ const useStake = (
       invalidateAllInfo();
       options?.onSuccess?.(result, variables, context);
     },
-    onError: (error) => {
-      errorPopup();
-      console.error(error);
+    onError: (error, variables, context) => {
+      options?.onError?.(error, variables, context);
+      if (error?.message.includes('Rejected from user')) {
+        return;
+      } else {
+        console.error(error);
+        errorPopup();
+      }
     },
   });
 
-  const mutate = async ({ poolId, stakeAmount }: stakeProps) => {
-    const txb = await packStakeTxb(account?.address, poolId, stakeAmount);
+  const mutate = async ({
+    poolId,
+    stakeAmount,
+    bucketStakeCoinType,
+  }: stakeProps) => {
+    const txb = await packStakeTxb(
+      account?.address,
+      poolId,
+      stakeAmount,
+      bucketStakeCoinType,
+    );
 
-    mutation.mutate({
+    return mutation.mutate({
       transactionBlock: txb,
       options: {
         showBalanceChanges: true,

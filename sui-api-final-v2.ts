@@ -13,7 +13,7 @@ import { bls12_381 as bls } from '@noble/curves/bls12-381';
 import { BucketClient } from 'bucket-protocol-sdk';
 import { Scallop } from '@scallop-io/sui-scallop-sdk';
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, get, set, child } from 'firebase/database';
+import { getDatabase, ref, get, set, child, remove } from 'firebase/database';
 
 // Instantiate BucketClient
 const bucket = new BucketClient();
@@ -29,6 +29,12 @@ export enum PoolTypeEnum {
   SCALLOP_PROTOCOL_SUI = 'SCALLOP_PROTOCOL_SUI',
 }
 
+export enum BucketCoinTypeEnum {
+  BUCK = 'BUCK',
+  USDT = 'USDT',
+  USDC = 'USDC',
+}
+
 const FIREBASE_ENV: string = `${process.env.NEXT_PUBLIC_FIREBASE_ENV}`;
 const FIREBASE_CONFIG: string = `${process.env.NEXT_PUBLIC_FIREBASE_CONFIG}`;
 
@@ -39,10 +45,18 @@ const DB_ROOT_PATH = `/demo/${FIREBASE_ENV}`;
 const DB_CHILD_REWARD_INFO = `rewardInfo`;
 const DB_CHILD_STAKE_INFO = `stakeInfo`;
 
+const DB_CHILD_GET_POOL_INFO = `getPoolInfo`;
+
 const SUI_VISION_DOMAIN = `${process.env.NEXT_PUBLIC_SUI_VISION_DOMAIN}`;
 
 // 智能合約地址
 const PACKAGE_ID: string = `${process.env.NEXT_PUBLIC_PACKAGE_ID}`;
+
+// 智能合約 升級後的舊合約地址
+const UPGRADE_PACKAGE_IDS: [] = JSON.parse(
+  `${process.env.NEXT_PUBLIC_UPGRADE_PACKAGE_IDS}`,
+);
+
 // 全域設定 Share Object 地址
 const GLOBAL_CONFIG_ID: string = `${process.env.NEXT_PUBLIC_GLOBAL_CONFIG_ID}`;
 // OwnerShip 證明 Object 地址
@@ -102,6 +116,8 @@ const SUI_CLOCK_ID: string = '0x6';
 const SUI_COIN_TYPE: string = '0x2::sui::SUI';
 const BUCK_COIN_TYPE: string = `${process.env.NEXT_PUBLIC_BUCK_COIN_TYPE}`;
 const SCA_COIN_TYPE: string = `${process.env.NEXT_PUBLIC_SCA_COIN_TYPE}`;
+const USDT_COIN_TYPE: string = `${process.env.NEXT_PUBLIC_USDT_COIN_TYPE}`;
+const USDC_COIN_TYPE: string = `${process.env.NEXT_PUBLIC_USDC_COIN_TYPE}`;
 
 // Bucket 所需要的參數
 const BUCKET_FLASK: string = `${process.env.NEXT_PUBLIC_BUCKET_FLASK}`;
@@ -119,6 +135,8 @@ const STAKE_POOL_SHARE_TYPE: string = 'StakedPoolShare';
 const SUI_COIN_DECIMAL = 1_000_000_000;
 const BUCK_COIN_DECIMAL = 1_000_000_000;
 const SCA_COIN_DECIMAL = 1_000_000_000;
+const USDC_COIN_DECIMAL = 1_000_000;
+const USDT_COIN_DECIMAL = 1_000_000;
 
 const poolTypeCommonTypeMap: any = new Map();
 let filterMap: Map<any, any> = new Map();
@@ -152,13 +170,32 @@ Array.from(poolTypeConfigMap.keys()).map((poolType: any) => {
       rewardCoinName = 'SCA';
       break;
   }
+  let allFilters: any[] = [];
   let structType = `${PACKAGE_ID}::${MODULE_STAKED_SHARE}::${STAKE_POOL_SHARE_TYPE}
     <${PACKAGE_ID}::${MODULE_POOL}::${poolType},${nativeType}, ${rewardType}>`;
   let filter: SuiObjectDataFilter = {
     StructType: structType,
   };
-  filterMap.set(poolType, filter);
+
+  allFilters.push(filter);
   filters.push(filter);
+
+  if (UPGRADE_PACKAGE_IDS.length > 0) {
+    for (let packageId of UPGRADE_PACKAGE_IDS) {
+      if (packageId !== '') {
+        let upgradeStructType = `${packageId}::${MODULE_STAKED_SHARE}::${STAKE_POOL_SHARE_TYPE}
+        <${packageId}::${MODULE_POOL}::${poolType},${nativeType}, ${rewardType}>`;
+        let upgradeFilter: SuiObjectDataFilter = {
+          StructType: upgradeStructType,
+        };
+        allFilters.push(upgradeFilter);
+        filters.push(upgradeFilter);
+      }
+    }
+  }
+
+  filterMap.set(poolType, allFilters);
+
   poolTypeCommonTypeMap.set(poolType, {
     nativeType: nativeType,
     rewardType: rewardType,
@@ -192,6 +229,16 @@ const drandClient = new HttpChainClient(chain, options);
 // 取得 Pool 類型陣列
 export function getPoolTypeList() {
   return Array.from(poolTypeConfigMap.keys());
+}
+
+// 取得 Bucket Stake Coin 類型
+export async function getBucketCoinTypeAndPriceRateMap() {
+  let bucketCoinTypeAndPriceRateMap: Map<any, any> = new Map();
+  let prices = await bucket.getPrices();
+  Object.keys(BucketCoinTypeEnum).forEach((coinType) => {
+    bucketCoinTypeAndPriceRateMap.set(coinType, prices[coinType]);
+  });
+  return bucketCoinTypeAndPriceRateMap;
 }
 
 // 構建 新建Pool 交易區塊
@@ -272,6 +319,17 @@ export async function getPoolInfo(poolType: any) {
   let poolList: Object[] = new Array<Object>();
   poolInfo.poolList = poolList;
 
+  let getPackageIdDbPath = `${DB_ROOT_PATH}/PackageId`;
+  let getPackageIdSnapshot = await get(child(DB_REF, getPackageIdDbPath));
+  let needRefresh = true;
+
+  if (getPackageIdSnapshot.exists()) {
+    let packageId = getPackageIdSnapshot.val();
+    if (packageId === PACKAGE_ID) {
+      needRefresh = false;
+    }
+  }
+
   if (poolAddressConfigMap.size > 0) {
     for (let poolConfig of poolAddressConfigMap.values()) {
       if (poolConfig.pool === '') {
@@ -279,6 +337,16 @@ export async function getPoolInfo(poolType: any) {
       }
       if (poolType && poolConfig.poolType !== poolType) {
         continue;
+      }
+
+      let getPoolInfoDbPath = `${DB_ROOT_PATH}/${poolConfig.poolType}/${DB_CHILD_GET_POOL_INFO}`;
+
+      if (!needRefresh) {
+        let getPoolInfoSnapshot = await get(child(DB_REF, getPoolInfoDbPath));
+        if (getPoolInfoSnapshot.exists()) {
+          poolList.push(getPoolInfoSnapshot.val());
+          continue;
+        }
       }
 
       let poolObjectResp = await suiClient.getObject({
@@ -408,10 +476,14 @@ export async function getPoolInfo(poolType: any) {
           });
         }
 
+        set(ref(FIREBASE_DB, getPoolInfoDbPath), poolObject);
+
         poolList.push(poolObject);
       }
     }
   }
+
+  set(ref(FIREBASE_DB, getPackageIdDbPath), PACKAGE_ID);
 
   return poolInfo;
 }
@@ -467,11 +539,16 @@ export async function getPoolRewardInfo(poolType: string) {
     totalDeposit = stakeSnapshot.val().totalStakeAmount;
   }
 
+  let diffDayTime = diffDay(nowDateFormatStr, oldTime);
+
   if (oldTime === '') {
     oldTime = nowDateFormatStr;
-  } else if (diffDay(nowDateFormatStr, oldTime) > 1) {
+    diffDayTime = 1;
+  } else if (diffDayTime > 1) {
     oldRewardAmount = newRewardAmount;
     oldTime = newTime;
+  } else {
+    diffDayTime = 1;
   }
 
   switch (poolType) {
@@ -479,11 +556,13 @@ export async function getPoolRewardInfo(poolType: string) {
       let bucketStakeInfo: any = await getBucketStakeInfo();
       let bucketStakeAmount: number = Number(bucketStakeInfo.depositAmount);
       let bucketApy: number = Number(bucketStakeInfo.apy);
-      let bucketRewardAmount: number = (bucketStakeAmount * bucketApy) / 365;
+      let bucketRewardAmount: number =
+        ((bucketStakeAmount * bucketApy) / 365) * diffDayTime;
 
       rewardAmount = Number(
-        (bucketRewardAmount * totalDeposit) / bucketStakeAmount +
-          oldRewardAmount,
+        (Number(bucketRewardAmount) * Number(totalDeposit)) /
+          Number(bucketStakeAmount) +
+          Number(oldRewardAmount),
       ).toFixed(15);
       break;
     case PoolTypeEnum.SCALLOP_PROTOCOL:
@@ -493,11 +572,13 @@ export async function getPoolRewardInfo(poolType: string) {
         let scallopCoinPrice = marketData.pools.sca.coinPrice;
         let scallopSupplyAmount = marketData.pools.sca.supplyCoin;
         let scallopRewardAmount =
-          (scallopSupplyAmount * scallopCoinPrice * scallopSupplyApy) / 365;
+          ((scallopSupplyAmount * scallopCoinPrice * scallopSupplyApy) / 365) *
+          diffDayTime;
 
         rewardAmount = Number(
-          (scallopRewardAmount * totalDeposit) / scallopSupplyAmount +
-            oldRewardAmount,
+          (Number(scallopRewardAmount) * Number(totalDeposit)) /
+            Number(scallopSupplyAmount) +
+            Number(oldRewardAmount),
         ).toFixed(15);
       }
       break;
@@ -508,12 +589,16 @@ export async function getPoolRewardInfo(poolType: string) {
         let scallopSuiCoinPrice = suiMarketData.pools.sui.coinPrice;
         let scallopSuiSupplyAmount = suiMarketData.pools.sui.supplyCoin;
         let scallopSuiRewardAmount =
-          (scallopSuiSupplyAmount * scallopSuiCoinPrice * scallopSuiSupplyApy) /
-          365;
+          ((scallopSuiSupplyAmount *
+            scallopSuiCoinPrice *
+            scallopSuiSupplyApy) /
+            365) *
+          diffDayTime;
 
         rewardAmount = Number(
-          (scallopSuiRewardAmount * totalDeposit) / scallopSuiSupplyAmount +
-            oldRewardAmount,
+          (Number(scallopSuiRewardAmount) * Number(totalDeposit)) /
+            Number(scallopSuiSupplyAmount) +
+            Number(oldRewardAmount),
         ).toFixed(15);
       }
       break;
@@ -708,54 +793,63 @@ export async function getRoundExpireTimeInfo(
   let roundExpireTimeMap: Map<any, any> = new Map();
   roundExpireTimeInfo.roundExpireTimeMap = roundExpireTimeMap;
 
-  let dynamicFieldsResp = await suiClient.getDynamicFieldObject({
+  let dynamicDataResp = await suiClient.getDynamicFields({
     parentId: poolId,
-    name: {
-      type: `${PACKAGE_ID}::pool::ClaimExpiredTime`,
-      value: {
-        dummy_field: false,
-      },
-    },
   });
 
-  if (dynamicFieldsResp.data) {
-    let content: any = dynamicFieldsResp.data.content;
-    if (roundArray && roundArray.length > 0) {
-      for (let round of roundArray) {
-        // 取得到期時間
-        let expireDynamicFieldObjectResp =
-          await suiClient.getDynamicFieldObject({
-            parentId: content.fields.id.id,
-            name: {
-              type: 'u64',
-              value: `${round}`,
-            },
-          });
-        if (expireDynamicFieldObjectResp.data) {
-          let content: any = expireDynamicFieldObjectResp.data.content;
-          roundExpireTimeMap.set(content.fields.name, content.fields.value);
-        }
+  if (dynamicDataResp.data) {
+    for (let data of dynamicDataResp.data) {
+      if (!data.name.type.includes('pool::ClaimExpiredTime')) {
+        continue;
       }
-    } else {
-      // 取得到期時間
-      let expireDynamicFieldsResp = await suiClient.getDynamicFields({
-        parentId: content.fields.id.id,
+      let dynamicFieldsResp = await suiClient.getDynamicFieldObject({
+        parentId: poolId,
+        name: {
+          type: data.name.type,
+          value: data.name.value,
+        },
       });
-      if (expireDynamicFieldsResp.data) {
-        let expireDynamicFieldDataArray = expireDynamicFieldsResp.data;
-        for (let expireDynamicFieldData of expireDynamicFieldDataArray) {
-          let expireData = await suiClient.getObject({
-            id: expireDynamicFieldData.objectId,
-            options: {
-              showContent: true,
-            },
+
+      if (dynamicFieldsResp.data) {
+        let content: any = dynamicFieldsResp.data.content;
+        if (roundArray && roundArray.length > 0) {
+          for (let round of roundArray) {
+            // 取得到期時間
+            let expireDynamicFieldObjectResp =
+              await suiClient.getDynamicFieldObject({
+                parentId: content.fields.id.id,
+                name: {
+                  type: 'u64',
+                  value: `${round}`,
+                },
+              });
+            if (expireDynamicFieldObjectResp.data) {
+              let content: any = expireDynamicFieldObjectResp.data.content;
+              roundExpireTimeMap.set(content.fields.name, content.fields.value);
+            }
+          }
+        } else {
+          // 取得到期時間
+          let expireDynamicFieldsResp = await suiClient.getDynamicFields({
+            parentId: content.fields.id.id,
           });
-          if (expireData.data?.content) {
-            let expireDataContent: any = expireData.data.content;
-            roundExpireTimeMap.set(
-              expireDataContent.fields.name,
-              expireDataContent.fields.value,
-            );
+          if (expireDynamicFieldsResp.data) {
+            let expireDynamicFieldDataArray = expireDynamicFieldsResp.data;
+            for (let expireDynamicFieldData of expireDynamicFieldDataArray) {
+              let expireData = await suiClient.getObject({
+                id: expireDynamicFieldData.objectId,
+                options: {
+                  showContent: true,
+                },
+              });
+              if (expireData.data?.content) {
+                let expireDataContent: any = expireData.data.content;
+                roundExpireTimeMap.set(
+                  expireDataContent.fields.name,
+                  expireDataContent.fields.value,
+                );
+              }
+            }
           }
         }
       }
@@ -837,14 +931,14 @@ export async function getUserStakeInfo(
   userStakeInfo.stakeCoinName = poolTypeCommonType.nativeCoinName;
 
   if (address) {
-    let filterStract = filterMap.get(poolType);
+    let filterStractList = filterMap.get(poolType);
     let objectResponse: any = await suiClient.getOwnedObjects({
       owner: address,
       options: {
         showContent: true,
       },
       filter: {
-        MatchAny: [filterStract],
+        MatchAny: filterStractList,
       },
     });
 
@@ -888,7 +982,6 @@ export async function getCanClaimRewardInfo(
   claimedRewardInfoId: string,
 ) {
   let canClaimRewardMap: Map<any, any> = new Map();
-
   let poolType = poolAddressConfigMap.get(poolId).poolType;
 
   let roundArray: any[] = [];
@@ -955,6 +1048,7 @@ export async function getUserWinnerInfo(
   userTicketList: any[],
 ) {
   let winnerInfoList: any[] = [];
+
   let canClaimRewardMapInfo = await getCanClaimRewardInfo(
     poolId,
     currentRound,
@@ -1036,11 +1130,12 @@ export async function packStakeTxb(
   address: string,
   poolId: string,
   stakeAmount: number,
+  bucketStakeCoinType: string | undefined | null,
 ) {
   let poolConfig = poolAddressConfigMap.get(poolId);
   let poolType = poolConfig.poolType;
 
-  let txb: TransactionBlock = new TransactionBlock();
+  let txb: any = new TransactionBlock();
 
   let args: TransactionArgument[] = [];
   let typeArgs: any[] = [];
@@ -1048,6 +1143,29 @@ export async function packStakeTxb(
   let stakeCoinType = poolTypeCommonTypeMap.get(poolType).nativeCoinType;
   let coinObjectId: string = '';
   let needSplit = false;
+
+  let change2Buck = false;
+
+  if (PoolTypeEnum.BUCKET_PROTOCOL === poolType) {
+    if (
+      bucketStakeCoinType != null &&
+      bucketStakeCoinType != undefined &&
+      bucketStakeCoinType.length > 0
+    ) {
+      switch (bucketStakeCoinType) {
+        case BucketCoinTypeEnum.USDC:
+          stakeCoinType = USDC_COIN_TYPE;
+          decimal = USDC_COIN_DECIMAL;
+          change2Buck = true;
+          break;
+        case BucketCoinTypeEnum.USDT:
+          stakeCoinType = USDT_COIN_TYPE;
+          decimal = USDT_COIN_DECIMAL;
+          change2Buck = true;
+          break;
+      }
+    }
+  }
 
   let walletBalance: any = await suiClient.getBalance({
     owner: address,
@@ -1098,6 +1216,17 @@ export async function packStakeTxb(
 
   switch (poolType) {
     case PoolTypeEnum.BUCKET_PROTOCOL:
+      let coinOut = null;
+
+      if (change2Buck) {
+        coinOut = bucket.psmSwapIn(
+          txb,
+          stakeCoinType, // e.g USDC coin type
+          realCoin, // usdc coin object
+          address, // referrer address
+        );
+      }
+
       typeArgs = [BUCK_COIN_TYPE, SUI_COIN_TYPE];
 
       args = [
@@ -1106,7 +1235,7 @@ export async function packStakeTxb(
         txb.object(poolConfig.numberPool),
         txb.object(poolId),
         txb.object(BUCKET_FLASK),
-        needSplit ? realCoin : txb.object(coinObjectId),
+        change2Buck ? coinOut : needSplit ? realCoin : txb.object(coinObjectId),
         txb.object(BUCKET_FOUTAIN),
         txb.pure.u64(BUCKET_LOCK_TIME),
         txb.object(SUI_CLOCK_ID),
@@ -1163,6 +1292,9 @@ export async function packStakeTxb(
       break;
   }
 
+  let getPoolInfoDbPath = `${DB_ROOT_PATH}/${poolConfig.poolType}/${DB_CHILD_GET_POOL_INFO}`;
+  await remove(child(DB_REF, getPoolInfoDbPath));
+
   return txb;
 }
 
@@ -1171,14 +1303,39 @@ export async function packWithdrawTxb(
   address: string,
   poolType: string,
   withdrawAmount: number,
+  bucketWithdrawCoinType: string | null | undefined,
 ) {
   if (address) {
-    let txb: TransactionBlock = new TransactionBlock();
+    let txb: any = new TransactionBlock();
 
     let poolConfig = poolTypeConfigMap.get(poolType);
     let poolCommonType = poolTypeCommonTypeMap.get(poolType);
     let totalAmount: number = 0;
     let needBreak: boolean = false;
+
+    let buckChange2OtherCoin = false;
+    let changeCoinType = '';
+    let changeCoinDecimal = SUI_COIN_DECIMAL;
+
+    if (
+      PoolTypeEnum.BUCKET_PROTOCOL === poolType &&
+      bucketWithdrawCoinType != null &&
+      bucketWithdrawCoinType != undefined &&
+      bucketWithdrawCoinType.length > 0
+    ) {
+      switch (bucketWithdrawCoinType) {
+        case BucketCoinTypeEnum.USDC:
+          buckChange2OtherCoin = true;
+          changeCoinType = USDC_COIN_TYPE;
+          changeCoinDecimal = USDC_COIN_DECIMAL;
+          break;
+        case BucketCoinTypeEnum.USDT:
+          buckChange2OtherCoin = true;
+          changeCoinType = USDT_COIN_TYPE;
+          changeCoinDecimal = USDT_COIN_DECIMAL;
+          break;
+      }
+    }
 
     let objectResponse: any = await suiClient.getOwnedObjects({
       owner: address,
@@ -1235,6 +1392,9 @@ export async function packWithdrawTxb(
                 let shareAmount =
                   Number(withdrawAmount) -
                   (Number(totalAmount) - Number(realAmount));
+                shareAmount = parseInt(
+                  (shareAmount * numRate * decimal).toString(),
+                );
                 if (shareAmount <= 0) {
                   needBreak = true;
                   break;
@@ -1242,9 +1402,7 @@ export async function packWithdrawTxb(
                 // 切割 share
                 splitArgs = [
                   txb.object(stakePoolShareId),
-                  txb.pure(
-                    parseInt((shareAmount * numRate * decimal).toString()),
-                  ),
+                  txb.pure(shareAmount),
                 ];
 
                 splitTypeArgs = [
@@ -1401,7 +1559,21 @@ export async function packWithdrawTxb(
           break;
         }
       }
+
+      if (buckChange2OtherCoin) {
+        await bucket.getPsmTx(
+          txb,
+          changeCoinType,
+          withdrawAmount * BUCK_COIN_DECIMAL,
+          true,
+          address,
+          address,
+        );
+      }
     }
+
+    let getPoolInfoDbPath = `${DB_ROOT_PATH}/${poolConfig.poolType}/${DB_CHILD_GET_POOL_INFO}`;
+    await remove(child(DB_REF, getPoolInfoDbPath));
 
     return txb;
   }
@@ -1506,6 +1678,9 @@ export async function packAllocateRewardsTxb(poolId: string) {
       break;
   }
 
+  let getPoolInfoDbPath = `${DB_ROOT_PATH}/${poolConfig.poolType}/${DB_CHILD_GET_POOL_INFO}`;
+  await remove(child(DB_REF, getPoolInfoDbPath));
+
   return txb;
 }
 
@@ -1586,6 +1761,7 @@ export async function packClaimRewardTxb(
         break;
       case PoolTypeEnum.SCALLOP_PROTOCOL_SUI:
         typeArgs = [SCALLOP_PROTOCOL_SUI_POOL_TYPE, SUI_COIN_TYPE];
+
         args = [
           txb.object(GLOBAL_CONFIG_ID),
           txb.object(winnerInfo.poolId),

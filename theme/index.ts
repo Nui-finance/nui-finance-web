@@ -11,6 +11,7 @@ import {
   Modal,
   Checkbox,
   Skeleton,
+  Menu,
 } from './component';
 import { styles } from './styles';
 import { Inter } from 'next/font/google';
@@ -33,6 +34,7 @@ export const theme = extendTheme({
     NumberInput,
     Modal,
     Skeleton,
+    Menu,
   },
   styles,
   config: {

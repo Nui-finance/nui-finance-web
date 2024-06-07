@@ -12,7 +12,7 @@ import {
   Tooltip,
   // useDisclosure,
 } from '@chakra-ui/react';
-import { poolCoin } from 'applications/constants';
+import { poolCoin, poolPageName } from 'applications/constants';
 
 import {
   Link,
@@ -31,6 +31,7 @@ import useGetAllPosition from 'applications/query/use-get-all-position';
 import useGetWinnerHistory from 'applications/query/use-get-winner-history';
 import useGetUserStakeInfo from 'applications/query/use-get-user-stake-info';
 import useGetUserWinnerInfo from 'applications/query/use-get-user-winner-info';
+import NoWalletConnect from './no-wallet-connect';
 
 const PoolPosition = ({ pool }: { pool: Pool }) => {
   const { poolType } = pool ?? {};
@@ -41,12 +42,12 @@ const PoolPosition = ({ pool }: { pool: Pool }) => {
     pool,
   });
   const { data: rateInfo } = useGetUsdRate({
-    poolType: pool?.poolType,
+    coinName: poolCoin[poolType]?.name,
   });
 
   return (
     <Link
-      href={`/raffles/${poolType}`}
+      href={`/raffles/${poolPageName[pool?.poolType]}`}
       display={
         userStakeInfo?.userStakeTotalAmount > 0 || isLoading ? 'flex' : 'none'
       }
@@ -101,7 +102,7 @@ const ClaimableBar = ({ pool }: { pool: Pool }) => {
         <ProtocolIcon type={pool.poolType} />
         <Text fontSize="sm">{`#week ${Number(pool.currentRound) - 1}`}</Text>
       </HStack>
-      <Link href={`/raffles/${pool.poolType}`}>
+      <Link href={`/raffles/${poolPageName[pool?.poolType]}`}>
         <HStack>
           <Text fontSize="sm">You have claimable win</Text>
           <ArrowRight />
@@ -113,7 +114,7 @@ const ClaimableBar = ({ pool }: { pool: Pool }) => {
 
 const Win = ({ poolType, round, coinName, reward }) => {
   const { data: rateInfo } = useGetUsdRate({
-    poolType,
+    coinName,
   });
   const { formatUSD, formatPrice } = useIntl();
   return (
@@ -152,7 +153,6 @@ const MyPosition = () => {
   // const depositDisclosure = useDisclosure();
   const account = useCurrentAccount();
   const { formatUSD } = useIntl();
-  const [open, setOpen] = useState(false);
 
   const { data: winners, isPending: isWinsLoading } = useGetWinnerHistory();
   const myWins = winners?.filter(
@@ -294,28 +294,7 @@ const MyPosition = () => {
           </Flex>
         </>
       ) : (
-        <VStack gap="8">
-          <VStack gap="0">
-            <Text
-              fontSize={{ base: '1.75rem', md: '2rem' }}
-              fontWeight="semibold"
-            >
-              No Wallet Connected
-            </Text>
-            <Text fontSize="sm" color="text.secondary">
-              Start earning by connecting your wallet.
-            </Text>
-          </VStack>
-          <ConnectModal
-            trigger={
-              <Button colorScheme="primary" alignSelf="stretch">
-                Connect Wallet
-              </Button>
-            }
-            open={open}
-            onOpenChange={(isOpen) => setOpen(isOpen)}
-          />
-        </VStack>
+        <NoWalletConnect />
       )}
     </Container>
   );

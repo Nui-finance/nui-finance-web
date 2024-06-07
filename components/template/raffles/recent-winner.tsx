@@ -12,11 +12,18 @@ import {
   Skeleton,
   VStack,
   Tooltip,
+  TextProps,
 } from '@chakra-ui/react';
 import { LinkButton, ProtocolCell, ProtocolIcon } from 'components/molecule';
 import { OpenInNew } from 'components/molecule/icons';
 
 import { formatAddress, useIntl } from 'utils';
+
+const tableContentTextProps = {
+  fontSize: 'sm',
+  color: 'text.primary',
+  fontWeight: 'medium',
+} as TextProps;
 
 const RecentWinner = ({ items, isLoading }) => {
   const { formatPrice } = useIntl();
@@ -36,7 +43,10 @@ const RecentWinner = ({ items, isLoading }) => {
           </VStack>
         ) : (
           <TableContainer w="full">
-            <Table variant="simple">
+            <Table
+              variant="simple"
+              __css={{ 'table-layout': 'fixed', width: 'full' }}
+            >
               <Thead>
                 <Tr
                   sx={{
@@ -51,7 +61,7 @@ const RecentWinner = ({ items, isLoading }) => {
                     <Th
                       key={th}
                       fontSize="sm"
-                      fontWeight="normal"
+                      fontWeight="medium"
                       color="text.secondary"
                       textTransform="capitalize"
                     >
@@ -76,14 +86,18 @@ const RecentWinner = ({ items, isLoading }) => {
                       <Td>
                         <ProtocolCell type={poolType} />
                       </Td>
-                      <Td>{`#${round}`}</Td>
+                      <Td>
+                        <Text {...tableContentTextProps}>{`#${round}`}</Text>
+                      </Td>
                       <Td>
                         <Tooltip
                           label={`${reward} ${coinName}`}
                           isDisabled={reward > 0.001}
                           shouldWrapChildren
                         >
-                          {formatPrice(reward)} {coinName}
+                          <Text {...tableContentTextProps}>
+                            {formatPrice(reward)} {coinName}
+                          </Text>
                         </Tooltip>
                       </Td>
                       <Td>
@@ -95,7 +109,9 @@ const RecentWinner = ({ items, isLoading }) => {
                           {formatAddress(address)}
                         </LinkButton> */}
                         <Tooltip label={address} shouldWrapChildren>
-                          <Text>{formatAddress(address)}</Text>
+                          <Text {...tableContentTextProps}>
+                            {formatAddress(address)}
+                          </Text>
                         </Tooltip>
                       </Td>
                     </Tr>

@@ -1,31 +1,21 @@
 import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  Box,
   Button,
-  Checkbox,
   Divider,
   Flex,
   FormControl,
-  FormErrorMessage,
   Heading,
   NumberInput,
   NumberInputField,
   Skeleton,
   Text,
   UseDisclosureProps,
-  useDisclosure,
 } from '@chakra-ui/react';
 import { poolCoin } from 'applications/constants';
 import { yupResolver } from '@hookform/resolvers/yup';
-import { PoolTypeEnum } from 'sui-api-final-v2';
 import { useForm } from 'react-hook-form';
-import { formatAddress, roundNumber, useIntl } from 'utils';
-import { boolean, number, object } from 'yup';
-import { useInvalidateAllInfo, useWithdraw } from 'applications/mutation';
+import { formatAddress, roundTo, useIntl } from 'utils';
+import { number, object } from 'yup';
+import { useWithdraw } from 'applications/mutation';
 import { Pool } from 'applications/type';
 import { useCurrentAccount } from '@mysten/dapp-kit';
 import {
@@ -33,10 +23,9 @@ import {
   ResponsiveModalBody,
   ResponsiveModalFooter,
 } from 'components/molecule/responsive-modal';
-import ResultModal from '../result-modal';
-import { useState } from 'react';
 import { Wallet } from 'components/molecule/icons';
 import useGetUserStakeInfo from 'applications/query/use-get-user-stake-info';
+import { useModal } from '../modals';
 type WithdrawModalProps = {
   pool: Pool;
   isOpen: boolean;
@@ -52,14 +41,13 @@ let withdrawing = false;
 const WithdrawModal = ({ pool, isOpen, onClose }: WithdrawModalProps) => {
   const { poolType } = pool ?? {};
   const { formatBalance } = useIntl();
-  const [result, setResult] = useState();
   const account = useCurrentAccount();
   const { data: userStakeInfo, isPending: isStakeInfoLoading } =
     useGetUserStakeInfo({
       pool,
     });
   const userStakeAmount = userStakeInfo?.userStakeTotalAmount;
-  const successDisclosure = useDisclosure();
+  const { withdrawOpen } = useModal();
 
   const schema = object({
     amount: number()
@@ -95,15 +83,25 @@ const WithdrawModal = ({ pool, isOpen, onClose }: WithdrawModalProps) => {
     reValidateMode: 'onChange',
   });
   const amount = watch('amount');
+  const onModalClose = () => {
+    setValue('amount', 0);
+    onClose();
+  };
 
   const { mutate: withdraw, isPending } = useWithdraw({
     poolType: pool?.poolType,
     onSuccess: (data: any) => {
-      setResult(data);
-      successDisclosure.onOpen();
+      withdrawOpen({
+        pool,
+        result: data,
+        amount: data.withdrawAmount,
+        onClose: () => {
+          onModalClose();
+        },
+      });
     },
     onError: () => {
-      onClose();
+      onModalClose();
     },
     onSettled: () => {
       withdrawing = false;
@@ -119,7 +117,7 @@ const WithdrawModal = ({ pool, isOpen, onClose }: WithdrawModalProps) => {
   };
   const withdrawPercentageOptions = [25, 50, 75, 100];
   return (
-    <ResponsiveModal size="sm" isOpen={isOpen} onClose={onClose}>
+    <ResponsiveModal size="sm" isOpen={isOpen} onClose={onModalClose}>
       <form onSubmit={handleSubmit(onSubmit)}>
         <ResponsiveModalBody px="8" pt="8" pb="0">
           <Flex flexDirection="column" gap="6">
@@ -175,7 +173,10 @@ const WithdrawModal = ({ pool, isOpen, onClose }: WithdrawModalProps) => {
                           onClick={() => {
                             setValue(
                               'amount',
-                              (Number(userStakeAmount) * option) / 100,
+                              roundTo(
+                                (Number(userStakeAmount) * option) / 100,
+                                3,
+                              ),
                             );
                             trigger('amount');
                           }}
@@ -223,24 +224,11 @@ const WithdrawModal = ({ pool, isOpen, onClose }: WithdrawModalProps) => {
               type="submit"
               isLoading={isPending}
             >
-              {`Withdraw ${formatBalance(userStakeAmount)} ${
-                poolCoin[poolType]?.name
-              }`}
+              {`Withdraw ${amount} ${poolCoin[poolType]?.name}`}
             </Button>
           </Flex>
         </ResponsiveModalFooter>
       </form>
-      <ResultModal
-        type="WITHDRAW"
-        result={result}
-        pool={pool}
-        amount={amount}
-        {...successDisclosure}
-        onClose={() => {
-          successDisclosure.onClose();
-          onClose();
-        }}
-      />
     </ResponsiveModal>
   );
 };

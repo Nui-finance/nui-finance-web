@@ -10,3 +10,4 @@ export { default as Tooltip } from './Tooltip';
 export { default as Modal } from './Modal';
 export { default as Checkbox } from './Checkbox';
 export { default as Skeleton } from './Skeleton';
+export { default as Menu } from './Menu';

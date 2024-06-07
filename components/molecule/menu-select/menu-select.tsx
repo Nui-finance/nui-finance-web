@@ -34,6 +34,7 @@ const MenuSelect = ({
   menuItemOptionProps,
   menuDrawerEnabled = false,
   renderDrawerHeader,
+  menuItemOptionIconProps,
   ...restProps
 }: MenuSelectProps<MenuSelectOptionType>) => {
   const { onOpen, onClose, isOpen } = useDisclosure();
@@ -166,7 +167,9 @@ const MenuSelect = ({
                     <MenuItemOption
                       key={option.value.toString()}
                       value={option.value.toString()}
-                      icon={<Check boxSize="1.25rem" />}
+                      icon={
+                        <Check boxSize="1.25rem" {...menuItemOptionIconProps} />
+                      }
                       flexDirection="row-reverse"
                       sx={{
                         '& > .chakra-menu__icon-wrapper': {

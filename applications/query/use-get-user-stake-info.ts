@@ -41,7 +41,6 @@ const useGetUserStakeInfo = ({ pool }: UseGetUserStakeInfoProps) => {
       pool?.poolType,
       pool?.statistics?.totalDeposit,
     ],
-    staleTime: Infinity,
     enabled: !!pool && !!account?.address,
     // refetchOnWindowFocus: true,
   });

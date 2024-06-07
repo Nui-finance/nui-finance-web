@@ -31,6 +31,7 @@ const useCountdown = (targetTimestamp: number): string => {
   }, []);
 
   useEffect(() => {
+    setCountDown(countDownDateInMs - new Date().getTime());
     const interval = setInterval(() => {
       setCountDown(countDownDateInMs - new Date().getTime());
     }, 1000);

@@ -17,7 +17,7 @@ const Governance = () => {
         maxW="container.md"
         position="absolute"
         zIndex={-1}
-        bottom={{ base: '16', md: '0' }}
+        bottom={{ base: '130px', md: '0' }}
         left="50%"
         right="50%"
         transform="translateX(-50%)"

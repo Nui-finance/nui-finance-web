@@ -22,8 +22,9 @@ import { roundNumber, useIntl } from 'utils';
 import useCountdown from 'utils/use-countdown';
 import RecentWinner from './raffles/recent-winner';
 import useGetWinnerHistory from 'applications/query/use-get-winner-history';
-import { poolCoin } from 'applications/constants';
+import { poolCoin, poolPageName } from 'applications/constants';
 import { Pool } from 'applications/type';
+import SupportU from 'components/molecule/icons/support-u';
 
 type LocalPool = {
   stakeCoinName: string;
@@ -35,6 +36,7 @@ type LocalPool = {
   link: string;
   tokenIn: string;
   tokenOut: string;
+  supportU?: boolean;
 } & Pool;
 
 const FilterTag = ({ tag, ...groupProps }) => {
@@ -66,9 +68,11 @@ const FilterTag = ({ tag, ...groupProps }) => {
 const PoolBlock = ({
   pool,
   isLoading,
+  supportU,
 }: {
   pool: LocalPool;
   isLoading: boolean;
+  supportU?: boolean;
 }) => {
   const countdown = useCountdown(Number(pool?.endTime));
   const { formatPrice } = useIntl();
@@ -81,13 +85,17 @@ const PoolBlock = ({
       w="full"
       bgColor="background.primary"
       borderRadius="32px"
+      position="relative"
     >
+      {supportU && (
+        <SupportU boxSize="24" position="absolute" top="0" right="0" />
+      )}
       <TokenPairIcon
         size="lg"
         tokenIn={pool?.tokenIn}
         tokenOut={pool?.tokenOut}
       />
-      <Flex flexDirection="column" gap="2" align="center">
+      <Flex flexDirection="column" gap="2" align="center" w="110%">
         <Text color="text.secondary" fontSize="sm" textAlign="center">
           A weekly chance to win
         </Text>
@@ -158,8 +166,9 @@ const PoolBlock = ({
         href={pool.link}
         variant="solid"
         colorScheme="primary"
-        fontWeight="normal"
-        rightIcon={<ArrowRight />}
+        fontSize="sm"
+        fontWeight="medium"
+        rightIcon={<ArrowRight boxSize="8" />}
         alignSelf="stretch"
         mt="auto"
         whiteSpace="normal"
@@ -173,7 +182,7 @@ const PoolBlock = ({
 const Main = () => {
   const { data: poolList, isLoading } = useGetPoolList();
 
-  const validatorPool = poolList?.find(
+  const scallopSuiPool = poolList?.find(
     (pool) => pool.poolType === PoolTypeEnum.SCALLOP_PROTOCOL_SUI,
   );
   const bucketPool = poolList?.find(
@@ -198,18 +207,18 @@ const Main = () => {
     checkboxValue.includes(winner.poolType),
   );
 
-  const pools = [
+  const pools: LocalPool[] = [
     {
-      ...validatorPool,
-      stakeCoinName: validatorPool?.stakeCoinName,
-      rewardCoinName: validatorPool?.rewardCoinName,
-      reward: validatorPool?.rewardAmount,
-      totalDeposit: roundNumber(validatorPool?.statistics?.totalDeposit, 3),
-      totalAttendance: validatorPool?.statistics?.totalAttendance,
+      ...scallopSuiPool,
+      stakeCoinName: scallopSuiPool?.stakeCoinName,
+      rewardCoinName: scallopSuiPool?.rewardCoinName,
+      reward: scallopSuiPool?.rewardAmount,
+      totalDeposit: roundNumber(scallopSuiPool?.statistics?.totalDeposit, 3),
+      totalAttendance: scallopSuiPool?.statistics?.totalAttendance,
       endTime:
-        Number(validatorPool?.timeInfo?.rewardDuration) * 1000 +
-        Number(validatorPool?.timeInfo?.startTime),
-      link: `/raffles/${PoolTypeEnum.SCALLOP_PROTOCOL_SUI}`,
+        Number(scallopSuiPool?.timeInfo?.rewardDuration) * 1000 +
+        Number(scallopSuiPool?.timeInfo?.startTime),
+      link: `/raffles/${poolPageName[PoolTypeEnum.SCALLOP_PROTOCOL_SUI]}`,
       tokenIn: 'SCALLOP_PROTOCOL_SUI',
       tokenOut: 'SCALLOP_PROTOCOL_SUI',
     },
@@ -223,9 +232,10 @@ const Main = () => {
       endTime:
         Number(bucketPool?.timeInfo?.rewardDuration) * 1000 +
         Number(bucketPool?.timeInfo?.startTime),
-      link: `/raffles/${PoolTypeEnum.BUCKET_PROTOCOL}`,
+      link: `/raffles/${poolPageName[PoolTypeEnum.BUCKET_PROTOCOL]}`,
       tokenIn: 'BUCKET_PROTOCOL',
       tokenOut: 'SCALLOP_PROTOCOL_SUI',
+      supportU: true,
     },
     {
       ...scallopPool,
@@ -237,7 +247,7 @@ const Main = () => {
       endTime:
         Number(scallopPool?.timeInfo?.rewardDuration) * 1000 +
         Number(scallopPool?.timeInfo?.startTime),
-      link: `/raffles/${PoolTypeEnum.SCALLOP_PROTOCOL}`,
+      link: `/raffles/${poolPageName[PoolTypeEnum.SCALLOP_PROTOCOL]}`,
       tokenIn: 'SCALLOP_PROTOCOL',
       tokenOut: 'SCALLOP_PROTOCOL',
     },
@@ -245,7 +255,7 @@ const Main = () => {
   return (
     <Container
       maxW="container.page"
-      px={{ base: 4, md: 8 }}
+      px="0"
       pt="16"
       as={Flex}
       flexDirection="column"
@@ -262,9 +272,17 @@ const Main = () => {
         >
           No Loss, Win Big Rewards.
         </Heading>
-        <Heading as="h4" color="neutral.600" fontWeight="medium">
+        <Text
+          color="neutral.600"
+          fontSize={{
+            base: 'md',
+            md: 'xl',
+          }}
+          textAlign="center"
+          fontWeight="medium"
+        >
           Deposit Anytime, Withdraw Anytime.
-        </Heading>
+        </Text>
       </Flex>
       <Flex
         w="full"
@@ -273,7 +291,14 @@ const Main = () => {
         direction={{ base: 'column', md: 'row' }}
       >
         {pools?.map((pool, index) => {
-          return <PoolBlock key={index} pool={pool} isLoading={isLoading} />;
+          return (
+            <PoolBlock
+              key={index}
+              pool={pool}
+              isLoading={isLoading}
+              supportU={pool?.supportU}
+            />
+          );
         })}
       </Flex>
       <VStack

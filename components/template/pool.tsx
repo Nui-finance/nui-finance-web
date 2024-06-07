@@ -12,10 +12,10 @@ import {
   useDisclosure,
   Box,
 } from '@chakra-ui/react';
-import { poolCoin, poolSource } from 'applications/constants';
+import { poolCoin } from 'applications/constants';
 import { PoolTypeEnum } from 'sui-api-final-v2';
-import { Link, TokenPairIcon } from 'components/molecule';
-import { ArrowLeft } from 'components/molecule/icons';
+import { Image, Link, TokenPairIcon } from 'components/molecule';
+import { ArrowLeft, Buck } from 'components/molecule/icons';
 import {
   convertScientificToDecimal,
   getProtocolLabel,
@@ -23,44 +23,50 @@ import {
   useIntl,
 } from 'utils';
 import DepositModal from 'components/organism/deposit/deposit-modal';
-import { useCurrentAccount } from '@mysten/dapp-kit';
+import { ConnectModal, useCurrentAccount } from '@mysten/dapp-kit';
 import useCountdown from 'utils/use-countdown';
 import WithdrawModal from 'components/organism/withdraw/withdraw-modal';
 import { useClaim } from 'applications/mutation';
 import useGetPoolList from 'applications/query/use-get-pool-list';
 import { Pool } from 'applications/type';
-import ResultModal from 'components/organism/result-modal';
 import { useState } from 'react';
 import useGetUserStakeInfo from 'applications/query/use-get-user-stake-info';
 import useGetUserWinnerInfo, {
   UserWinnerInfo,
 } from 'applications/query/use-get-user-winner-info';
+import { useModal } from 'components/organism/modals';
+import Usdc from 'components/molecule/icons/usdc';
+import RewardImage from 'assets/reward.png';
 
 const ClaimBlock = ({
   pool,
-  winnerInfo,
+  winnerInfoList,
 }: {
   pool: Pool;
-  winnerInfo: UserWinnerInfo['winnerInfoList'][0];
+  winnerInfoList: UserWinnerInfo['winnerInfoList'];
 }) => {
-  const [result, setResult] = useState();
   const [claimed, setClaimed] = useState(false);
-  const claimSuccessDisclosure = useDisclosure();
+  const { successOpen } = useModal();
   const {
     mutate: claim,
     canClaim,
     isPending: isClaiming,
   } = useClaim({
     pool,
-    winnerInfoList: [winnerInfo],
+    winnerInfoList,
     onSuccess: (data: any) => {
-      setResult(data);
-      claimSuccessDisclosure.onOpen();
+      successOpen({
+        pool,
+        result: data,
+        amount: convertScientificToDecimal(pool?.lastRewardBalance),
+      });
       setClaimed(true);
     },
   });
   const { isPending } = useGetUserWinnerInfo({ pool });
-  const countdown = useCountdown(Number(winnerInfo?.expireTime));
+  const countdown = useCountdown(
+    Number(winnerInfoList?.[winnerInfoList?.length - 1]?.expireTime),
+  );
   const round = Number(pool?.currentRound) - 1;
   return (
     <Skeleton isLoaded={!isPending} w="full">
@@ -99,15 +105,15 @@ const ClaimBlock = ({
           alignItems="center"
           alignSelf="stretch"
         >
-          <Box w="14" h="14">
-            {/* <Image src={} alt="chosen image" fill /> */}
+          <Box w="20" h="20">
+            <Image src={RewardImage} alt="chosen image" fill />
           </Box>
           <Heading as="h3">You Got Chosen!</Heading>
           <Button
             isDisabled={!canClaim}
             flexGrow="1"
             flexShrink="0"
-            alignSelf="stretch"
+            alignSelf={{ base: 'stretch', md: 'center' }}
             onClick={() => {
               claim();
             }}
@@ -117,16 +123,6 @@ const ClaimBlock = ({
             {pool?.rewardCoinName}
           </Button>
         </Flex>
-        <ResultModal
-          type="SUCCESS"
-          result={result}
-          pool={pool}
-          amount={convertScientificToDecimal(pool?.lastRewardBalance)}
-          {...claimSuccessDisclosure}
-          onClose={() => {
-            claimSuccessDisclosure.onClose();
-          }}
-        />
       </VStack>
     </Skeleton>
   );
@@ -135,20 +131,21 @@ const ClaimBlock = ({
 const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
   const depositDisclosure = useDisclosure();
   const withdrawDisclosure = useDisclosure();
+  const [open, setOpen] = useState(false);
   const { formatBalance, formatUSD, formatPrice } = useIntl();
+  const account = useCurrentAccount();
 
   const { data: poolList, isLoading: isLoadingPoolList } = useGetPoolList();
   const pool = poolList?.find((item) => item.poolType === poolType);
-  const countdown = useCountdown(Number(pool?.currentRoundExpireTime));
-  const account = useCurrentAccount();
+  const countdown = useCountdown(
+    Number(pool?.timeInfo?.rewardDuration) * 1000 +
+      Number(pool?.timeInfo?.startTime),
+  );
 
-  const {
-    data: userStakeInfo,
-    isPending: isStakeInfoLoading,
-    isStale: isStakeInfoStale,
-  } = useGetUserStakeInfo({
-    pool,
-  });
+  const { data: userStakeInfo, isPending: isStakeInfoLoading } =
+    useGetUserStakeInfo({
+      pool,
+    });
   const { data: userWinnerInfo } = useGetUserWinnerInfo({ pool });
   const totalReward = pool?.rewardAmount;
   // const isInactive =
@@ -190,7 +187,7 @@ const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
         <Flex
           direction={{ base: 'column', md: 'row' }}
           alignItems="center"
-          gap={{ base: '4', md: '8' }}
+          gap={{ base: '6', md: '8' }}
           mx="auto"
         >
           <TokenPairIcon tokenIn={poolType} />
@@ -198,13 +195,13 @@ const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
         </Flex>
       </Flex>
       <VStack gap="4" alignSelf="stretch">
-        {winnerInfoList?.map((winnerInfo) => (
+        {winnerInfoList?.length > 0 && (
           <ClaimBlock
-            key={winnerInfo?.stakeShareId}
+            key={winnerInfoList[winnerInfoList?.length - 1]?.stakeShareId}
             pool={pool}
-            winnerInfo={winnerInfo}
+            winnerInfoList={[winnerInfoList?.[winnerInfoList?.length - 1]]}
           />
-        ))}
+        )}
         <Flex gap="4" w="full" direction={{ base: 'column', md: 'row' }}>
           <Flex
             flex="1"
@@ -225,21 +222,23 @@ const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
                   <Text fontSize="sm">#week {pool?.currentRound}</Text>
                 </Skeleton>
               </Flex>
-              <Text color="primary.400" fontSize="sm">
-                {countdown}
-              </Text>
+              <Skeleton isLoaded={!isLoadingPoolList}>
+                <Text color="primary.400" fontSize="sm">
+                  {countdown}
+                </Text>
+              </Skeleton>
             </Flex>
             <Flex flexDirection="column" gap="2">
               <Text color="text.secondary" fontSize="lg">
-                Prize
+                EST. Prize
               </Text>
               <Skeleton isLoaded={!isLoadingPoolList}>
-                <Flex gap="2">
+                <Flex gap="2" alignItems="center">
                   <Heading as="h2" fontSize="40px">
                     {!!account?.address ? formatBalance(totalReward) : '--'}
                   </Heading>
                   <Heading as="h2" fontSize="40px">
-                    {poolCoin[poolType]?.name}
+                    {pool?.rewardCoinName}
                   </Heading>
                 </Flex>
               </Skeleton>
@@ -254,12 +253,12 @@ const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
                 <Text color="text.secondary" fontSize="sm">
                   Total Deposite
                 </Text>
-                <Skeleton isLoaded={!isLoadingPoolList}>
+                <Skeleton isLoaded={!isLoadingPoolList} minW="14">
                   <Text fontSize="sm">
                     {!isNaN(pool?.statistics?.totalDeposit)
                       ? formatBalance(pool?.statistics?.totalDeposit)
                       : '--'}{' '}
-                    {poolCoin[poolType]?.name}
+                    {pool?.stakeCoinName}
                   </Text>
                 </Skeleton>
               </Flex>
@@ -288,68 +287,97 @@ const PoolBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
               </Flex> */}
             </Flex>
           </Flex>
-          <Flex
-            flex="1"
-            borderRadius="32px"
-            p="6"
-            gap="6"
-            flexDirection="column"
-            bgColor="background.primary"
-          >
-            <Flex flexDirection="column" gap="2">
-              <Text color="text.secondary" fontSize="lg">
-                My Position
-              </Text>
-              <Skeleton isLoaded={!isStakeInfoLoading && !isStakeInfoStale}>
-                <Flex gap="2">
-                  <Heading as="h2">
+          {!!account?.address && (
+            <Flex
+              flex="1"
+              borderRadius="32px"
+              p="6"
+              gap="6"
+              flexDirection="column"
+              bgColor="background.primary"
+            >
+              <Flex flexDirection="column" gap="2">
+                <Text color="text.secondary" fontSize="lg">
+                  My Position
+                </Text>
+
+                <Skeleton isLoaded={!isStakeInfoLoading}>
+                  <Flex gap="2">
+                    <Heading as="h2">
+                      {!!account?.address
+                        ? formatBalance(userStakeInfo?.userStakeTotalAmount)
+                        : '--'}
+                    </Heading>
+                    <Heading as="h2">{poolCoin[poolType]?.name}</Heading>
+                  </Flex>
+                </Skeleton>
+                <Skeleton isLoaded={!isStakeInfoLoading}>
+                  <Text color="text.secondary" fontSize="sm">
                     {!!account?.address
-                      ? formatBalance(userStakeInfo?.userStakeTotalAmount)
+                      ? formatUSD(userStakeInfo?.userStakeTotalAmount)
                       : '--'}
-                  </Heading>
-                  <Heading as="h2">{poolCoin[poolType]?.name}</Heading>
-                </Flex>
-              </Skeleton>
-              <Skeleton isLoaded={!isStakeInfoLoading && !isStakeInfoStale}>
+                  </Text>
+                </Skeleton>
+              </Flex>
+              <Flex justifyContent="space-between" gap="2">
                 <Text color="text.secondary" fontSize="sm">
-                  {!!account?.address
-                    ? formatUSD(userStakeInfo?.userStakeTotalAmount)
-                    : '--'}
+                  Win Chance
                 </Text>
-              </Skeleton>
+                <Skeleton isLoaded={!isStakeInfoLoading}>
+                  <Text fontSize="sm">
+                    EST.{' '}
+                    {isNaN(userStakeInfo?.luckRate) ||
+                    userStakeInfo?.luckRate === Infinity
+                      ? '--'
+                      : roundNumber(userStakeInfo?.luckRate, 2)}
+                    %
+                  </Text>
+                </Skeleton>
+              </Flex>
+              <Flex gap="2" wrap="wrap">
+                <Button
+                  flex="1"
+                  isDisabled={!account?.address || isStakeInfoLoading}
+                  onClick={withdrawDisclosure.onOpen}
+                >
+                  Withdraw
+                </Button>
+                <Button
+                  flex="2"
+                  colorScheme="primary"
+                  isDisabled={!account?.address || isStakeInfoLoading}
+                  onClick={depositDisclosure.onOpen}
+                >
+                  Deposit
+                </Button>
+              </Flex>
             </Flex>
-            <Flex justifyContent="space-between" gap="2">
-              <Text color="text.secondary" fontSize="sm">
-                Win Chance
-              </Text>
-              <Skeleton isLoaded={!isStakeInfoLoading}>
-                <Text fontSize="sm">
-                  {isNaN(userStakeInfo?.luckRate) ||
-                  userStakeInfo?.luckRate === Infinity
-                    ? '--'
-                    : roundNumber(userStakeInfo?.luckRate, 2)}
-                  %
+          )}
+          {!account?.address && (
+            <Flex
+              flex="1"
+              borderRadius="32px"
+              p="6"
+              gap="6"
+              flexDirection="column"
+              bgColor="background.primary"
+            >
+              <Flex flexDirection="column" gap="4">
+                <Text color="text.secondary" fontSize="lg">
+                  My Position
                 </Text>
-              </Skeleton>
+                <ConnectModal
+                  trigger={
+                    <Button colorScheme="primary" alignSelf="stretch">
+                      Connect Wallet
+                    </Button>
+                  }
+                  open={open}
+                  onOpenChange={(isOpen) => setOpen(isOpen)}
+                />
+              </Flex>
             </Flex>
-            <Flex gap="2" wrap="wrap">
-              <Button
-                flex="1"
-                isDisabled={!account?.address || isStakeInfoLoading}
-                onClick={withdrawDisclosure.onOpen}
-              >
-                Withdraw
-              </Button>
-              <Button
-                flex="2"
-                colorScheme="primary"
-                isDisabled={!account?.address || isStakeInfoLoading}
-                onClick={depositDisclosure.onOpen}
-              >
-                Deposit
-              </Button>
-            </Flex>
-          </Flex>
+          )}
         </Flex>
       </VStack>
     </Container>

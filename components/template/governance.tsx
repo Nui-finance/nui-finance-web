@@ -14,97 +14,83 @@ import {
   Tr,
   Skeleton,
   useDisclosure,
+  TextProps,
 } from '@chakra-ui/react';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import { poolCoin } from 'applications/constants';
 import { useDrawLottery } from 'applications/mutation';
 import useGetPoolList from 'applications/query/use-get-pool-list';
 import useGetUserWinnerInfo from 'applications/query/use-get-user-winner-info';
-import { Pool } from 'applications/type';
 
 import { ProtocolIcon } from 'components/molecule';
-import ResultModal from 'components/organism/result-modal';
+import { useModal } from 'components/organism/modals';
 import SelectedModal from 'components/organism/selected-modal';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { PoolTypeEnum } from 'sui-api-final-v2';
+import { roundNumber } from 'utils';
 import useCountdown from 'utils/use-countdown';
 
-let revealing = false;
-
-type PoolRevealProps = {
-  pools: (Pool & {
-    isDisable: boolean;
-  })[];
+const revealed = {
+  [PoolTypeEnum.SCALLOP_PROTOCOL_SUI]: false,
+  [PoolTypeEnum.BUCKET_PROTOCOL]: false,
+  [PoolTypeEnum.SCALLOP_PROTOCOL]: false,
 };
 
-const usePools = (data: Pool[]): PoolRevealProps => {
-  const account = useCurrentAccount();
-
-  const pools = data?.map((pool) => {
-    const isDisable = !account?.address || !pool?.canAllocateReward;
-
-    return {
-      ...pool,
-      isDisable,
-    };
-  });
-
-  return { pools };
-};
+const tableContentTextProps = {
+  fontSize: 'sm',
+  color: 'text.primary',
+  fontWeight: 'medium',
+} as TextProps;
 
 const RevealButton = ({ poolType }: { poolType: PoolTypeEnum }) => {
-  const [drawResult, setDrawResult] = useState();
-  const [revealed, setRevealed] = useState(false);
-  const drawDisclosure = useDisclosure();
   const winDisclosure = useDisclosure();
-  const loseDisclosure = useDisclosure();
-  const {
-    data: pools,
-    isStale: isPoolListStale,
-    isPending: isPoolListPending,
-  } = useGetPoolList();
+  const account = useCurrentAccount();
+  const { data: pools } = useGetPoolList();
+  const revealing = useRef(false);
+
+  const { loseOpen, drawOpen } = useModal();
 
   // const { refetch: refetchAllPool } = useGetPoolList();
-  const pool = pools.find((p) => p.poolType === poolType);
+  const pool = pools?.find((p) => p.poolType === poolType);
 
-  const {
-    data: userWinnerInfo,
-    isStale: isWinnerInfoStale,
-    isPending: isWinnerInfoPending,
-  } = useGetUserWinnerInfo({
-    pool,
-  });
+  const { data: userWinnerInfo, isPending: isWinnerInfoPending } =
+    useGetUserWinnerInfo({
+      pool,
+    });
 
   const { mutate: drawLottery, isPending } = useDrawLottery({
     poolType,
-    onSuccess: async (data: any) => {
-      setDrawResult(data);
-      drawDisclosure.onOpen();
-      setRevealed(true);
+    onSuccess: (data: any) => {
+      revealed[poolType] = true;
+      drawOpen({
+        pool,
+        result: data,
+      });
     },
     onSettled: () => {
-      revealing = false;
+      revealing.current = false;
     },
   });
-  if (pool.poolType === PoolTypeEnum.SCALLOP_PROTOCOL_SUI) {
-  }
   useEffect(() => {
-    if (revealed && !isPoolListStale && !isWinnerInfoStale) {
-      if (
-        !!userWinnerInfo?.winnerInfoList &&
-        !(userWinnerInfo?.winnerInfoList?.length > 0)
-      ) {
-        loseDisclosure.onOpen();
-        setRevealed(false);
+    if (revealed[poolType] && !!userWinnerInfo) {
+      if (userWinnerInfo?.winnerInfoList.length === 0) {
+        loseOpen({
+          pool,
+        });
       }
+      revealed[poolType] = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealed, userWinnerInfo, isPoolListStale, isWinnerInfoStale]);
+  }, [revealed, userWinnerInfo]);
 
   const rewardTime =
     Number(pool?.timeInfo?.rewardDuration) * 1000 +
     Number(pool?.timeInfo?.startTime);
   const countdown = useCountdown(rewardTime);
   const canReveal = Date.now() > rewardTime;
+
+  const isRevealButtonPending =
+    isPending || (isWinnerInfoPending && !!account?.address);
   return (
     <>
       {canReveal ? (
@@ -113,13 +99,13 @@ const RevealButton = ({ poolType }: { poolType: PoolTypeEnum }) => {
           variant="solid"
           w={{ base: 'auto', md: 'full' }}
           h={{ base: '14', md: '46px' }}
-          isDisabled={!canReveal}
+          isDisabled={!canReveal || !account?.address}
           onClick={() => {
-            if (revealing) return;
-            revealing = true;
+            if (revealing.current) return;
+            revealing.current = true;
             drawLottery(pool?.poolId);
           }}
-          isLoading={isPending || isWinnerInfoPending || isPoolListPending}
+          isLoading={isRevealButtonPending}
         >
           Reveal
         </Button>
@@ -130,28 +116,11 @@ const RevealButton = ({ poolType }: { poolType: PoolTypeEnum }) => {
           w={{ base: 'auto', md: 'full' }}
           h={{ base: '14', md: '46px' }}
           isDisabled={true}
-          isLoading={isPending || isWinnerInfoPending}
+          isLoading={isRevealButtonPending}
         >
           Reveal in {countdown}
         </Button>
       )}
-      <ResultModal
-        type="REWARD"
-        result={drawResult}
-        pool={pool}
-        {...drawDisclosure}
-        onClose={async () => {
-          drawDisclosure.onClose();
-        }}
-      />
-      <ResultModal
-        type="UNSELECTED"
-        pool={pool}
-        {...loseDisclosure}
-        onClose={() => {
-          loseDisclosure.onClose();
-        }}
-      />
       <SelectedModal
         pool={pool}
         winnerInfoList={userWinnerInfo?.winnerInfoList}
@@ -161,10 +130,81 @@ const RevealButton = ({ poolType }: { poolType: PoolTypeEnum }) => {
   );
 };
 
-const Governance = () => {
+const MobileRevealBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
   const { data, isLoading } = useGetPoolList();
-  const { pools } = usePools(data);
+  const pool = data?.find((p) => p.poolType === poolType);
+  return (
+    <Flex
+      display={{ base: 'flex', md: 'none' }}
+      direction="column"
+      align="stretch"
+      gap="2"
+      alignSelf="stretch"
+    >
+      <HStack justifyContent="space-between" alignItems="center">
+        <Flex gap="2" alignItems="center">
+          <Skeleton isLoaded={!isLoading}>
+            <ProtocolIcon type={pool?.poolType} />
+          </Skeleton>
+          <Skeleton isLoaded={!isLoading}>
+            <Text fontSize="sm">{`${roundNumber(pool?.rewardAmount, 3)} ${pool?.stakeCoinName}`}</Text>
+          </Skeleton>
+        </Flex>
+        <Skeleton isLoaded={!isLoading}>
+          <Text ml="auto" fontSize="sm">{`#${pool?.currentRound}`}</Text>
+        </Skeleton>
+      </HStack>
+      <RevealButton poolType={pool?.poolType} />
+    </Flex>
+  );
+};
 
+const DesktopRevealBlock = ({ poolType }: { poolType: PoolTypeEnum }) => {
+  const { data, isLoading } = useGetPoolList();
+  const pool = data?.find((p) => p.poolType === poolType);
+  return (
+    <Tr
+      key={pool?.poolType}
+      display={{ base: 'none', md: 'table-row' }}
+      sx={{
+        '& > Td': {
+          border: 'none',
+          px: 0,
+          py: '2',
+        },
+      }}
+    >
+      <Td>
+        <HStack>
+          <ProtocolIcon type={poolType} />
+          <Text {...tableContentTextProps}>{poolCoin[poolType].name}</Text>
+        </HStack>
+      </Td>
+      <Td>
+        <Skeleton w={isLoading ? '12' : 'auto'} isLoaded={!isLoading}>
+          <Text {...tableContentTextProps}>{`#${pool?.currentRound}`}</Text>
+        </Skeleton>
+      </Td>
+      <Td>
+        <Skeleton w={isLoading ? '24' : 'auto'} isLoaded={!isLoading}>
+          <Text {...tableContentTextProps}>
+            {`${roundNumber(pool?.rewardAmount, 3)} ${pool?.rewardCoinName}`}
+          </Text>
+        </Skeleton>
+      </Td>
+      <Td>
+        <RevealButton poolType={pool?.poolType} />
+      </Td>
+    </Tr>
+  );
+};
+
+const Governance = () => {
+  const pools = [
+    PoolTypeEnum.SCALLOP_PROTOCOL_SUI,
+    PoolTypeEnum.BUCKET_PROTOCOL,
+    PoolTypeEnum.SCALLOP_PROTOCOL,
+  ];
   return (
     <Center
       maxW="container.page"
@@ -210,100 +250,54 @@ const Governance = () => {
             reveal button.
           </Text>
         </VStack>
-        {isLoading ? (
-          <VStack alignSelf="stretch">
-            {Array.from(Array(3)).map((_, i) => (
-              <Skeleton key={i} w="full" h={{ base: '20', md: '14' }} />
-            ))}
+        <>
+          {/* mobile UI */}
+          <VStack
+            display={{ base: 'flex', md: 'none' }}
+            gap="4"
+            alignSelf="stretch"
+          >
+            {pools?.map((poolType) => {
+              return <MobileRevealBlock key={poolType} poolType={poolType} />;
+            })}
           </VStack>
-        ) : (
-          <>
-            {/* mobile UI */}
-            <VStack
-              display={{ base: 'flex', md: 'none' }}
-              gap="4"
-              alignSelf="stretch"
+          {/* desktop UI */}
+          <TableContainer w="full" display={{ base: 'none', md: 'block' }}>
+            <Table
+              variant="simple"
+              __css={{ 'table-layout': 'fixed', width: 'full' }}
             >
-              {pools?.map((pool, index) => {
-                return (
-                  <Flex
-                    key={index}
-                    display={{ base: 'flex', md: 'none' }}
-                    direction="column"
-                    align="stretch"
-                    gap="2"
-                    alignSelf="stretch"
-                  >
-                    <HStack>
-                      <ProtocolIcon type={pool?.poolType} />
-                      <Text fontSize="sm">{`${pool?.rewardAmount} ${pool?.stakeCoinName}`}</Text>
-                      <Text
-                        ml="auto"
-                        fontSize="sm"
-                      >{`#${pool?.currentRound}`}</Text>
-                    </HStack>
-                    <RevealButton poolType={pool?.poolType} />
-                  </Flex>
-                );
-              })}
-            </VStack>
-            {/* desktop UI */}
-            <TableContainer w="full" display={{ base: 'none', md: 'block' }}>
-              <Table variant="simple">
-                <Thead>
-                  <Tr
-                    sx={{
-                      '& > Th': {
-                        border: 'none',
-                        p: 0,
-                        pb: '2',
-                      },
-                    }}
-                  >
-                    {['Pool', 'Week', 'Prize', 'Reveal'].map((th) => (
-                      <Th
-                        key={th}
-                        fontSize="sm"
-                        fontWeight="normal"
-                        color="text.secondary"
-                        textTransform="capitalize"
-                      >
-                        {th}
-                      </Th>
-                    ))}
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {pools?.map((pool) => (
-                    <Tr
-                      key={pool?.poolType}
-                      display={{ base: 'none', md: 'table-row' }}
-                      sx={{
-                        '& > Td': {
-                          border: 'none',
-                          px: 0,
-                          py: '2',
-                        },
-                      }}
+              <Thead>
+                <Tr
+                  sx={{
+                    '& > Th': {
+                      border: 'none',
+                      p: 0,
+                      pb: '2',
+                    },
+                  }}
+                >
+                  {['Pool', 'Week', 'Prize', 'Reveal'].map((th) => (
+                    <Th
+                      key={th}
+                      fontSize="sm"
+                      fontWeight="medium"
+                      color="text.secondary"
+                      textTransform="capitalize"
                     >
-                      <Td>
-                        <HStack>
-                          <ProtocolIcon type={pool?.poolType} />
-                          <Text fontSize="sm">{pool?.stakeCoinName}</Text>
-                        </HStack>
-                      </Td>
-                      <Td>{`#${pool?.currentRound}`}</Td>
-                      <Td>{`${pool?.rewardAmount} ${pool?.rewardCoinName}`}</Td>
-                      <Td>
-                        <RevealButton poolType={pool?.poolType} />
-                      </Td>
-                    </Tr>
+                      {th}
+                    </Th>
                   ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
-          </>
-        )}
+                </Tr>
+              </Thead>
+              <Tbody>
+                {pools?.map((poolType) => (
+                  <DesktopRevealBlock key={poolType} poolType={poolType} />
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </>
       </VStack>
     </Center>
   );

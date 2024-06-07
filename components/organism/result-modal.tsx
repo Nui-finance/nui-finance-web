@@ -93,13 +93,10 @@ const ResultModal = ({
   isOpen,
   onClose,
 }: ResultModalProps) => {
-  const { poolType } = pool ?? {};
-  // const { formatBalance } = useIntl();
-
   const explorerUrl = `https://suiscan.xyz/${process.env.NEXT_PUBLIC_SUI_NETWORK_NAME}/tx/${result?.digest}`;
-
   const { title, imageUrl } = mappedModalType(type);
-
+  const coinName =
+    type === 'REWARD' ? pool?.rewardCoinName : pool?.stakeCoinName;
   return (
     <ResponsiveModal size="sm" isOpen={isOpen} onClose={onClose}>
       <ResponsiveModalBody>
@@ -115,7 +112,7 @@ const ResultModal = ({
               <Flex justifyContent="space-between" w="full">
                 <Text fontSize="sm">Amount</Text>
                 <Text color="primary.400" fontSize="sm">
-                  {amount} {pool?.rewardCoinName}
+                  {amount} {coinName}
                 </Text>
               </Flex>
             </Flex>

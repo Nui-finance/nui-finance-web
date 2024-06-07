@@ -3,6 +3,7 @@ import { Pool, UserStakeInfo } from 'applications/type';
 import { getUserWinnerInfo } from 'sui-api-final-v2';
 import useGetUserStakeInfo from './use-get-user-stake-info';
 import { useCurrentAccount } from '@mysten/dapp-kit';
+import { useEffect } from 'react';
 
 export type UserWinnerInfo = {
   winnerInfoList: {
@@ -24,6 +25,7 @@ const useGetUserWinnerInfo = ({ pool }: UseGetUserWinnerInfoProps) => {
   const { data: userStakeInfo } = useGetUserStakeInfo({
     pool,
   });
+
   const account = useCurrentAccount();
   const queryFn = async () => {
     return {
@@ -39,7 +41,12 @@ const useGetUserWinnerInfo = ({ pool }: UseGetUserWinnerInfoProps) => {
 
   return useQuery<UserWinnerInfo & UserStakeInfo>({
     queryFn,
-    queryKey: ['user-winner-info', pool?.currentRound, account?.address],
+    queryKey: [
+      'user-winner-info',
+      pool?.poolId,
+      pool?.currentRound,
+      account?.address,
+    ],
     // staleTime: Infinity,
     enabled:
       !!pool?.poolId && !!account?.address && !!userStakeInfo?.userTicketList,

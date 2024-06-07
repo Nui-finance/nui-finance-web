@@ -11,7 +11,7 @@ import BackgroundImageMobile from 'assets/raffles_all.png';
 
 const Raffles = () => {
   return (
-    <Box w="full" position="relative" overflowX="clip">
+    <Box w="full" position="relative" overflow="inherit">
       <SEO />
       <Main />
       {/* mobile backgound image */}
@@ -41,8 +41,8 @@ const Raffles = () => {
         w="full"
         maxW="446px"
         position="absolute"
-        top="16"
-        right="-10"
+        top="-3"
+        right="-4"
         zIndex={-1}
         sx={{
           aspectRatio: 2 / 3,
@@ -55,8 +55,8 @@ const Raffles = () => {
         w="full"
         maxW="442px"
         position="absolute"
-        top="280px"
-        left="-24"
+        top="400px"
+        left="-18"
         zIndex={-1}
         sx={{
           aspectRatio: 3 / 2,

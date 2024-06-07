@@ -1,4 +1,4 @@
-import { Box } from '@chakra-ui/react';
+import { Box, BoxProps } from '@chakra-ui/react';
 
 import { ProtocolIcon } from 'components/molecule';
 
@@ -11,7 +11,7 @@ const getDefaultTokenOut = (tokenIn: string) => {
     case 'SCALLOP_PROTOCOL':
       return 'SCALLOP_PROTOCOL';
     default:
-      return null;
+      return 'SCALLOP_PROTOCOL_SUI';
   }
 };
 
@@ -19,38 +19,49 @@ const TokenPairIcon = ({
   size = 'md',
   tokenIn,
   tokenOut,
+  hasWhiteBorder = true,
+  ...restProps
 }: {
-  size?: 'md' | 'lg';
+  size?: 'xs' | 'md' | 'lg';
   tokenIn: string;
   tokenOut?: string;
-}) => {
+  hasWhiteBorder?: boolean;
+} & BoxProps) => {
+  const boxSizeMap = {
+    inIcon: { xs: '6', md: '16', lg: '24' },
+    outIcon: { xs: '4', md: '10', lg: '14' },
+    right: { xs: '-1', md: '-4', lg: '-4' },
+    bottom: { xs: '-1', md: '-2', lg: '-2' },
+  };
   const _tokenOut = tokenOut ?? getDefaultTokenOut(tokenIn);
   return (
-    <Box position="relative">
-      <ProtocolIcon type={tokenIn} boxSize={size === 'md' ? '16' : '24'} />
+    <Box position="relative" {...restProps}>
+      <ProtocolIcon type={tokenIn} boxSize={boxSizeMap['inIcon'][size]} />
       <Box
-        w={size === 'md' ? '10' : '14'}
+        w={boxSizeMap['outIcon'][size]}
         position="absolute"
-        right="-4"
-        bottom="-2"
+        right={boxSizeMap['right'][size]}
+        bottom={boxSizeMap['bottom'][size]}
         sx={{ aspectRatio: 1 }}
       >
         <ProtocolIcon
           type={_tokenOut}
           position="absolute"
           inset={0}
-          boxSize={size === 'md' ? '10' : '14'}
+          boxSize={boxSizeMap['outIcon'][size]}
         />
-        <Box
-          w="full"
-          h="full"
-          border="3px solid"
-          borderColor="background.primary"
-          borderRadius="full"
-          bgColor="transparent"
-          position="absolute"
-          inset={0}
-        />
+        {hasWhiteBorder && (
+          <Box
+            w="full"
+            h="full"
+            border="3px solid"
+            borderColor="background.primary"
+            borderRadius="full"
+            bgColor="transparent"
+            position="absolute"
+            inset={0}
+          />
+        )}
       </Box>
     </Box>
   );

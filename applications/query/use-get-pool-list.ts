@@ -37,7 +37,6 @@ const useGetPoolList = (params?: UseGetPoolListProps) => {
     queryKey: ['pool-info', poolType],
     queryFn,
     // refetchOnWindowFocus: true,
-    staleTime: Infinity,
     ...options,
   });
 };

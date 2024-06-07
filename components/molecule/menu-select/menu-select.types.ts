@@ -1,6 +1,7 @@
 import {
   ButtonProps,
   IconButtonProps,
+  IconProps,
   MenuItemOptionProps,
   MenuListProps,
   MenuOptionGroupProps,
@@ -20,6 +21,7 @@ export type MenuSelectProps<T> = {
   menuListProps?: MenuListProps;
   menuOptionGroupProps?: MenuOptionGroupProps;
   menuItemOptionProps?: MenuItemOptionProps;
+  menuItemOptionIconProps?: IconProps;
   menuDrawerEnabled?: boolean;
   renderDrawerHeader?: () => React.ReactNode;
   placement?: Placement;

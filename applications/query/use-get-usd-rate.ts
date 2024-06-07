@@ -1,4 +1,5 @@
 import { UseQueryOptions, useQuery } from '@tanstack/react-query';
+import { poolTypeByCoinName } from 'applications/constants';
 import { getUsdRateByPoolType } from 'sui-api-final-v2';
 
 export type RateInfo = {
@@ -7,19 +8,26 @@ export type RateInfo = {
 };
 
 type UseGetUsdRateProps = {
-  poolType: string;
+  coinName: string;
 } & Omit<UseQueryOptions<RateInfo>, 'queryKey' | 'queryFn'>;
 
-const useGetUsdRate = ({ poolType }: UseGetUsdRateProps) => {
+const useGetUsdRate = ({ coinName }: UseGetUsdRateProps) => {
   const queryFn = async () => {
-    const rateInfo = await getUsdRateByPoolType(poolType);
-    return rateInfo;
+    if (coinName === 'USDT' || coinName === 'USDC') {
+      return {
+        stakeCoinUsdRate: '1',
+        stakeCoinName: coinName,
+      };
+    } else {
+      const rateInfo = await getUsdRateByPoolType(poolTypeByCoinName[coinName]);
+      return rateInfo;
+    }
   };
 
   return useQuery<RateInfo>({
     queryFn,
-    queryKey: ['usd', { poolType }],
-    enabled: !!poolType,
+    queryKey: ['usd', { coinName }],
+    enabled: !!coinName,
   });
 };
 
